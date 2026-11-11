@@ -1,0 +1,13 @@
+﻿Código Lançamento;Data da Baixa;Data de Vencimento;Situação;Tipo;Banco;Conta Corrente;Categoria;Cliente / Fornecedor;Número do Documento;Observações;Valor Líquido;Valor Nominal;Juros;Desconto;Contrato
+OM-1001;05/10/2026;05/10/2026;Conciliado;Entrada;Itaú Unibanco;45892-7;1.01.01 - Receita de Vendas de Mercadorias;Horizonte Comércio Ltda;NF-5012;Recebimento PIX NF-5012;18500,0;18500,0;0,0;0,0;
+OM-1002;08/10/2026;08/10/2026;Baixado;Entrada;Itaú Unibanco;45892-7;1.01.01 - Receita de Vendas de Mercadorias;Distribuidora Atlântica;BOL-8801;Baixa de boleto cobrado pelo valor cheio no ERP;4200,0;4200,0;0,0;0,0;
+OM-1003;13/10/2026;27/11/2026;Baixado;Entrada;Itaú Unibanco;45892-7;1.01.02 - Antecipação de Recebíveis;Carteira Duplicatas Outubro;ANT-301;Baixa lote antecipação ANT-301;57420,0;60000,0;0,0;2580,0;ANT-301
+OM-1004;15/10/2026;15/10/2026;Baixado;Saída;Itaú Unibanco;45892-7;2.04.02 - Despesa Financeira - Juros de Empréstimos;Itaú Unibanco S.A.;CTR9941-P03;Pagamento parcela 03/12 Capital de Giro Contrato 9941 lançado integralmente em despesa;-11105,6;11105,6;11105,6;0,0;CTR-GIRO-341
+OM-1005;18/10/2026;18/10/2026;Conciliado;Saída;Itaú Unibanco;45892-7;2.01.03 - Matéria-Prima e Insumos;Metalúrgica Sul S.A.;PAG-7710;Pagamento fornecedor PIX PAG-7710;-6450,0;6450,0;0,0;0,0;
+OM-1006;22/10/2026;22/10/2026;Baixado;Saída;Itaú Unibanco;45892-7;2.02.05 - Serviços de Consultoria;Vektor Assessoria Empresarial;NFSE-319;Baixa manual indevida sem pagamento bancário efetivo;-3850,0;3850,0;0,0;0,0;
+OM-2001;06/10/2026;06/10/2026;Conciliado;Entrada;Bradesco;99812-3;1.01.01 - Receita de Prestação de Serviços;Alfa Logística Integrada;TED-4010;Recebimento TED Cliente Alfa;22000,0;22000,0;0,0;0,0;
+OM-2002;11/10/2026;11/10/2026;Baixado;Entrada;Bradesco;99812-3;1.01.01 - Receita de Vendas de Mercadorias;Comercial Nova Era;BOL-9102;Liquidação boleto BOL-9102;8494,2;8500,0;0,0;5,8;
+OM-2004A;16/10/2026;16/10/2026;Baixado;Entrada;Bradesco;99812-3;1.01.01 - Receita de Vendas de Mercadorias;Varejo Sul Ltda;NF-810;Recebimento NF-810 integrante do lote PIX;3100,0;3100,0;0,0;0,0;
+OM-2004B;16/10/2026;16/10/2026;Baixado;Entrada;Bradesco;99812-3;1.01.01 - Receita de Vendas de Mercadorias;Varejo Norte Ltda;NF-811;Recebimento NF-811 integrante do lote PIX;2300,0;2300,0;0,0;0,0;
+OM-2003A;20/10/2026;20/10/2026;Baixado;Saída;Bradesco;99812-3;2.03.01 - Passivo - Amortização de Empréstimos a Pagar;Banco Bradesco S.A.;CTR4410-P02;Amortização principal parcela 02/18 Contrato 4410;-10000,0;10000,0;0,0;0,0;CTR-SAC-237
+OM-2003B;20/10/2026;20/10/2026;Baixado;Saída;Bradesco;99812-3;2.04.02 - Despesa Financeira - Juros de Financiamento;Banco Bradesco S.A.;CTR4410-P02;Juros parcela 02/18 Contrato 4410 cobrados acima da tabela SAC;-2790,0;2790,0;2790,0;0,0;CTR-SAC-237
