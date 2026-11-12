@@ -15,6 +15,7 @@ PAGES = [
     "app_pages/omie.py",
     "app_pages/base_normalizada.py",
     "app_pages/excecoes.py",
+    "app_pages/fechamento.py",
     "app_pages/vinculos.py",
     "app_pages/regras.py",
     "app_pages/parametros_bancarios.py",

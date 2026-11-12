@@ -75,6 +75,16 @@ DEFAULT_AUDIT_RULES: list[dict[str, Any]] = [
         "condicao_sql": None,
         "ativa": True,
     },
+    {
+        "codigo": "AUD-06",
+        "nome": "Fechamento Diário Divergente",
+        "descricao": "Divergência entre a movimentação líquida diária realizada no extrato bancário e as baixas registradas no ERP Omie para a mesma data.",
+        "categoria": "Conciliação Bancária",
+        "severidade": "Alerta",
+        "tipo_regra": "NATIVA",
+        "condicao_sql": None,
+        "ativa": True,
+    },
 ]
 
 DEFAULT_BANK_PARAMS: list[dict[str, Any]] = [
@@ -427,26 +437,25 @@ class VerticeDB:
 
     def _seed_defaults(self, con: duckdb.DuckDBPyConnection) -> None:
         rules_count = con.execute("SELECT COUNT(*) FROM catalogo_regras").fetchone()[0]
-        if rules_count == 0:
-            for r in DEFAULT_AUDIT_RULES:
-                con.execute(
-                    """
-                    INSERT INTO catalogo_regras
-                    (codigo, nome, descricao, categoria, severidade, tipo_regra, condicao_sql, ativa)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    [
-                        r["codigo"],
-                        r["nome"],
-                        r["descricao"],
-                        r["categoria"],
-                        r["severidade"],
-                        r["tipo_regra"],
-                        r["condicao_sql"],
-                        r["ativa"],
-                    ],
-                )
-            # Reidrata regras customizadas salvas em JSON caso existam
+        for r in DEFAULT_AUDIT_RULES:
+            con.execute(
+                """
+                INSERT OR IGNORE INTO catalogo_regras
+                (codigo, nome, descricao, categoria, severidade, tipo_regra, condicao_sql, ativa)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    r["codigo"],
+                    r["nome"],
+                    r["descricao"],
+                    r["categoria"],
+                    r["severidade"],
+                    r["tipo_regra"],
+                    r["condicao_sql"],
+                    r["ativa"],
+                ],
+            )
+        # Reidrata regras customizadas salvas em JSON caso existam
             if self.rules_json_path.exists():
                 try:
                     saved_custom = json.loads(self.rules_json_path.read_text(encoding="utf-8"))
@@ -767,6 +776,117 @@ class VerticeDB:
             return con.execute(
                 f"SELECT {', '.join(OMIE_COLUMNS)} FROM lancamentos_omie ORDER BY data_lancamento DESC, id_omie"
             ).df()
+
+    def get_fechamento_mensal_df(self, competencia: str | None = None) -> pd.DataFrame:
+        """Calcula o fechamento de movimentação mensal cruzando Extrato x Omie."""
+        with self.connect() as con:
+            comp_filter_ext = f"WHERE SUBSTR(data_lancamento, 1, 7) = '{competencia}'" if competencia and competencia != "TODAS" else ""
+            comp_filter_omi = f"AND SUBSTR(data_lancamento, 1, 7) = '{competencia}'" if competencia and competencia != "TODAS" else ""
+            query = f"""
+            WITH ext_mes AS (
+                SELECT 
+                    banco_nome,
+                    SUBSTR(data_lancamento, 1, 7) AS mes,
+                    ROUND(SUM(CASE WHEN valor > 0 THEN valor ELSE 0.0 END), 2) AS entradas_extrato,
+                    ROUND(SUM(CASE WHEN valor < 0 THEN valor ELSE 0.0 END), 2) AS saidas_extrato,
+                    ROUND(SUM(valor), 2) AS mov_liquida_extrato,
+                    COUNT(*) AS qtd_extrato
+                FROM extrato
+                {comp_filter_ext}
+                GROUP BY 1, 2
+            ),
+            omi_mes AS (
+                SELECT 
+                    banco_nome,
+                    SUBSTR(data_lancamento, 1, 7) AS mes,
+                    ROUND(SUM(CASE WHEN valor > 0 THEN valor ELSE 0.0 END), 2) AS entradas_omie,
+                    ROUND(SUM(CASE WHEN valor < 0 THEN valor ELSE 0.0 END), 2) AS saidas_omie,
+                    ROUND(SUM(valor), 2) AS mov_liquida_omie,
+                    COUNT(*) AS qtd_omie
+                FROM omie
+                WHERE status IN ('BAIXADO', 'CONCILIADO')
+                {comp_filter_omi}
+                GROUP BY 1, 2
+            )
+            SELECT 
+                COALESCE(e.mes, o.mes) AS competencia,
+                COALESCE(e.banco_nome, o.banco_nome) AS banco_nome,
+                COALESCE(e.entradas_extrato, 0.0) AS entradas_extrato,
+                COALESCE(o.entradas_omie, 0.0) AS entradas_omie,
+                COALESCE(e.saidas_extrato, 0.0) AS saidas_extrato,
+                COALESCE(o.saidas_omie, 0.0) AS saidas_omie,
+                COALESCE(e.mov_liquida_extrato, 0.0) AS mov_liquida_extrato,
+                COALESCE(o.mov_liquida_omie, 0.0) AS mov_liquida_omie,
+                ROUND(COALESCE(e.mov_liquida_extrato, 0.0) - COALESCE(o.mov_liquida_omie, 0.0), 2) AS diferenca,
+                COALESCE(e.qtd_extrato, 0) AS qtd_extrato,
+                COALESCE(o.qtd_omie, 0) AS qtd_omie
+            FROM ext_mes e
+            FULL OUTER JOIN omi_mes o 
+                ON e.mes = o.mes 
+                AND e.banco_nome = o.banco_nome
+            ORDER BY competencia DESC, banco_nome
+            """
+            return con.execute(query).df()
+
+    def get_fechamento_diario_df(self, competencia: str | None = None, banco: str | None = None) -> pd.DataFrame:
+        """Calcula o fechamento de movimentação diária cruzando Extrato x Omie."""
+        with self.connect() as con:
+            conditions_ext = []
+            conditions_omi = ["status IN ('BAIXADO', 'CONCILIADO')"]
+            if competencia and competencia != "TODAS":
+                conditions_ext.append(f"SUBSTR(data_lancamento, 1, 7) = '{competencia}'")
+                conditions_omi.append(f"SUBSTR(data_lancamento, 1, 7) = '{competencia}'")
+            if banco and banco != "TODOS":
+                conditions_ext.append(f"banco_nome = '{banco}'")
+                conditions_omi.append(f"banco_nome = '{banco}'")
+
+            where_ext = ("WHERE " + " AND ".join(conditions_ext)) if conditions_ext else ""
+            where_omi = ("WHERE " + " AND ".join(conditions_omi)) if conditions_omi else ""
+
+            query = f"""
+            WITH ext_dia AS (
+                SELECT 
+                    banco_nome,
+                    data_lancamento,
+                    ROUND(SUM(CASE WHEN valor > 0 THEN valor ELSE 0.0 END), 2) AS entradas_extrato,
+                    ROUND(SUM(CASE WHEN valor < 0 THEN valor ELSE 0.0 END), 2) AS saidas_extrato,
+                    ROUND(SUM(valor), 2) AS mov_liquida_extrato,
+                    COUNT(*) AS qtd_extrato
+                FROM extrato
+                {where_ext}
+                GROUP BY 1, 2
+            ),
+            omi_dia AS (
+                SELECT 
+                    banco_nome,
+                    data_lancamento,
+                    ROUND(SUM(CASE WHEN valor > 0 THEN valor ELSE 0.0 END), 2) AS entradas_omie,
+                    ROUND(SUM(CASE WHEN valor < 0 THEN valor ELSE 0.0 END), 2) AS saidas_omie,
+                    ROUND(SUM(valor), 2) AS mov_liquida_omie,
+                    COUNT(*) AS qtd_omie
+                FROM omie
+                {where_omi}
+                GROUP BY 1, 2
+            )
+            SELECT 
+                COALESCE(e.data_lancamento, o.data_lancamento) AS data_lancamento,
+                COALESCE(e.banco_nome, o.banco_nome) AS banco_nome,
+                COALESCE(e.entradas_extrato, 0.0) AS entradas_extrato,
+                COALESCE(o.entradas_omie, 0.0) AS entradas_omie,
+                COALESCE(e.saidas_extrato, 0.0) AS saidas_extrato,
+                COALESCE(o.saidas_omie, 0.0) AS saidas_omie,
+                COALESCE(e.mov_liquida_extrato, 0.0) AS mov_liquida_extrato,
+                COALESCE(o.mov_liquida_omie, 0.0) AS mov_liquida_omie,
+                ROUND(COALESCE(e.mov_liquida_extrato, 0.0) - COALESCE(o.mov_liquida_omie, 0.0), 2) AS diferenca,
+                COALESCE(e.qtd_extrato, 0) AS qtd_extrato,
+                COALESCE(o.qtd_omie, 0) AS qtd_omie
+            FROM ext_dia e
+            FULL OUTER JOIN omi_dia o 
+                ON e.data_lancamento = o.data_lancamento 
+                AND e.banco_nome = o.banco_nome
+            ORDER BY data_lancamento DESC, banco_nome
+            """
+            return con.execute(query).df()
 
     @staticmethod
     def build_issue_signature(

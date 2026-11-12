@@ -32,6 +32,7 @@ NAV_GROUPS: dict[str, list[st.Page]] = {
     ],
     "2. Auditoria": [
         st.Page(c.PG_EXCECOES, title="Exceções e tratativas", icon=":material/fact_check:"),
+        st.Page(c.PG_FECHAMENTO, title="Fechamento de saldos", icon=":material/balance:"),
         st.Page(c.PG_VINCULOS, title="Vínculos manuais", icon=":material/link:"),
     ],
     "3. Configuração": [

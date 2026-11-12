@@ -909,6 +909,50 @@ def executar_auditoria_completa(
                     )
 
     # =========================================================================
+    # AUD-06: Fechamento Diário Divergente
+    # =========================================================================
+    if "AUD-06" in active_rules and not extrato_df.empty and not omie_df.empty:
+        fechamento_dia = db.get_fechamento_diario_df(competencia=competencia)
+        dias_divergentes = fechamento_dia[fechamento_dia["diferenca"].abs() > 0.05]
+        for _, drow in dias_divergentes.iterrows():
+            dt_dia = str(drow["data_lancamento"])
+            banco_dia = str(drow["banco_nome"])
+            dif_dia = float(drow["diferenca"])
+            ext_dia_val = float(drow["mov_liquida_extrato"])
+            omi_dia_val = float(drow["mov_liquida_omie"])
+            _add_div(
+                codigo_regra="AUD-06",
+                data_ocorrencia=dt_dia,
+                banco=banco_dia,
+                valor_esperado=omi_dia_val,
+                valor_realizado=ext_dia_val,
+                valor_divergente=abs(dif_dia),
+                resumo=(
+                    f"Fechamento diário divergente ({dt_dia} - {banco_dia}): "
+                    f"Extrato {ext_dia_val:,.2f} vs Omie {omi_dia_val:,.2f} (Delta: R$ {dif_dia:,.2f})"
+                ),
+                memoria_calculo=(
+                    f"Na data {dt_dia}, a movimentação líquida total do extrato do {banco_dia} "
+                    f"foi de R$ {ext_dia_val:,.2f} ({int(drow['qtd_extrato'])} lançamentos) contra "
+                    f"R$ {omi_dia_val:,.2f} ({int(drow['qtd_omie'])} baixas) no Omie, gerando uma quebra "
+                    f"líquida diária de R$ {dif_dia:,.2f}."
+                ),
+                id_extrato=None,
+                id_omie=None,
+                extra_detail={
+                    "data": dt_dia,
+                    "banco": banco_dia,
+                    "mov_liquida_extrato": ext_dia_val,
+                    "mov_liquida_omie": omi_dia_val,
+                    "diferenca_dia": dif_dia,
+                    "entradas_extrato": float(drow["entradas_extrato"]),
+                    "entradas_omie": float(drow["entradas_omie"]),
+                    "saidas_extrato": float(drow["saidas_extrato"]),
+                    "saidas_omie": float(drow["saidas_omie"]),
+                },
+            )
+
+    # =========================================================================
     # Regras Customizadas SQL (CUS-*) executadas direto no DuckDB
     # =========================================================================
     # Atualiza pares_conciliados antes de rodar as views SQL customizadas
