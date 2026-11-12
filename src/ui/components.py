@@ -136,7 +136,7 @@ def render_execucao_card(ctx: AuditContext) -> None:
                     icon=":material/warning:",
                 )
             else:
-                m = executar_auditoria(ctx.db, ctx.competencia)
+                m = executar_auditoria(ctx.db, ctx.competencia, banco=ctx.banco)
                 flash(
                     "success",
                     f"Auditoria concluída ({m['execucao_id']})",

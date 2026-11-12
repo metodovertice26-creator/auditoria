@@ -479,14 +479,15 @@ def sugerir_candidatos_conciliacao(
 def executar_auditoria_completa(
     db: VerticeDB,
     competencia: str | None = None,
+    banco: str | None = None,
 ) -> tuple[dict[str, Any], pd.DataFrame]:
     """
-    Executa todas as regras ativas (AUD-01 a AUD-05 + Regras Customizadas SQL),
+    Executa todas as regras ativas (AUD-01 a AUD-06 + Regras Customizadas SQL),
     salva a execução no DuckDB e retorna (resumo_kpis, df_divergencias).
     """
     execucao_id = f"EXEC-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-    extrato_df = db.get_extrato_df(competencia=competencia)
-    omie_df = db.get_omie_df(competencia=competencia)
+    extrato_df = db.get_extrato_df(competencia=competencia, banco=banco)
+    omie_df = db.get_omie_df(competencia=competencia, banco=banco)
     bank_params_df = db.get_bank_params_df()
     loans_df = db.get_loan_contracts_df()
     rules_df = db.get_rules_df()
@@ -912,7 +913,7 @@ def executar_auditoria_completa(
     # AUD-06: Fechamento Diário Divergente
     # =========================================================================
     if "AUD-06" in active_rules and not extrato_df.empty and not omie_df.empty:
-        fechamento_dia = db.get_fechamento_diario_df(competencia=competencia)
+        fechamento_dia = db.get_fechamento_diario_df(competencia=competencia, banco=banco)
         dias_divergentes = fechamento_dia[fechamento_dia["diferenca"].abs() > 0.05]
         for _, drow in dias_divergentes.iterrows():
             dt_dia = str(drow["data_lancamento"])

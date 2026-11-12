@@ -59,12 +59,16 @@ def enriquecer_com_workflow(div_df: pd.DataFrame, wf_map: dict[str, dict[str, st
     return out
 
 
-def carregar_divergencias(db: VerticeDB, competencia: str | None) -> tuple[dict[str, Any] | None, pd.DataFrame]:
-    """Retorna o resumo da última execução e as divergências enriquecidas, filtradas pela competência."""
+def carregar_divergencias(
+    db: VerticeDB, competencia: str | None, banco: str | None = None
+) -> tuple[dict[str, Any] | None, pd.DataFrame]:
+    """Retorna o resumo da última execução e as divergências enriquecidas, filtradas pela competência e banco."""
     summary, raw = db.get_latest_audit_results()
     divs = enriquecer_com_workflow(raw, db.get_workflow_map())
     if competencia and not divs.empty:
         divs = divs[divs["data_ocorrencia"].astype(str).str.startswith(competencia)].reset_index(drop=True)
+    if banco and banco != "TODOS" and not divs.empty:
+        divs = divs[divs["banco"] == banco].reset_index(drop=True)
     return summary, divs
 
 
@@ -81,7 +85,7 @@ def calcular_kpis(divs: pd.DataFrame) -> KpisAuditoria:
     )
 
 
-def executar_auditoria(db: VerticeDB, competencia: str | None) -> dict[str, Any]:
+def executar_auditoria(db: VerticeDB, competencia: str | None, banco: str | None = None) -> dict[str, Any]:
     """Executa o motor completo e devolve as métricas da execução."""
-    metrics, _ = executar_auditoria_completa(db, competencia=competencia)
+    metrics, _ = executar_auditoria_completa(db, competencia=competencia, banco=banco)
     return metrics

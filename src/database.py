@@ -745,37 +745,50 @@ class VerticeDB:
             ).fetchall()
         return [r[0] for r in rows]
 
-    def get_extrato_df(self, competencia: str | None = None) -> pd.DataFrame:
+    def get_available_banks(self) -> list[str]:
+        """Retorna lista de instituições bancárias com movimentações cadastradas no Extrato ou Omie."""
         with self.connect() as con:
-            if competencia and competencia != "TODAS":
-                return con.execute(
-                    f"""
-                    SELECT {', '.join(EXTRATO_COLUMNS)}
-                    FROM extrato_bancario
-                    WHERE SUBSTR(data_lancamento, 1, 7) = ?
-                    ORDER BY data_lancamento DESC, id_extrato
-                    """,
-                    [competencia],
-                ).df()
-            return con.execute(
-                f"SELECT {', '.join(EXTRATO_COLUMNS)} FROM extrato_bancario ORDER BY data_lancamento DESC, id_extrato"
-            ).df()
+            rows = con.execute(
+                """
+                SELECT DISTINCT banco_nome FROM (
+                    SELECT banco_nome FROM extrato_bancario WHERE banco_nome IS NOT NULL AND banco_nome != ''
+                    UNION
+                    SELECT banco_nome FROM lancamentos_omie WHERE banco_nome IS NOT NULL AND banco_nome != ''
+                )
+                ORDER BY banco_nome
+                """
+            ).fetchall()
+        return [r[0] for r in rows if r[0]]
 
-    def get_omie_df(self, competencia: str | None = None) -> pd.DataFrame:
+    def get_extrato_df(self, competencia: str | None = None, banco: str | None = None) -> pd.DataFrame:
         with self.connect() as con:
+            conditions = []
+            params = []
             if competencia and competencia != "TODAS":
-                return con.execute(
-                    f"""
-                    SELECT {', '.join(OMIE_COLUMNS)}
-                    FROM lancamentos_omie
-                    WHERE SUBSTR(data_lancamento, 1, 7) = ?
-                    ORDER BY data_lancamento DESC, id_omie
-                    """,
-                    [competencia],
-                ).df()
-            return con.execute(
-                f"SELECT {', '.join(OMIE_COLUMNS)} FROM lancamentos_omie ORDER BY data_lancamento DESC, id_omie"
-            ).df()
+                conditions.append("SUBSTR(data_lancamento, 1, 7) = ?")
+                params.append(competencia)
+            if banco and banco != "TODOS":
+                conditions.append("banco_nome = ?")
+                params.append(banco)
+
+            where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+            query = f"SELECT {', '.join(EXTRATO_COLUMNS)} FROM extrato_bancario {where_clause} ORDER BY data_lancamento DESC, id_extrato"
+            return con.execute(query, params).df()
+
+    def get_omie_df(self, competencia: str | None = None, banco: str | None = None) -> pd.DataFrame:
+        with self.connect() as con:
+            conditions = []
+            params = []
+            if competencia and competencia != "TODAS":
+                conditions.append("SUBSTR(data_lancamento, 1, 7) = ?")
+                params.append(competencia)
+            if banco and banco != "TODOS":
+                conditions.append("banco_nome = ?")
+                params.append(banco)
+
+            where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+            query = f"SELECT {', '.join(OMIE_COLUMNS)} FROM lancamentos_omie {where_clause} ORDER BY data_lancamento DESC, id_omie"
+            return con.execute(query, params).df()
 
     def get_fechamento_mensal_df(self, competencia: str | None = None) -> pd.DataFrame:
         """Calcula o fechamento de movimentação mensal cruzando Extrato x Omie."""

@@ -13,6 +13,7 @@ from src.services.auditoria import KpisAuditoria, calcular_kpis, carregar_diverg
 
 _CTX_KEY = "_vertice_ctx"
 TODAS = "TODAS"
+TODOS = "TODOS"
 
 
 @dataclass
@@ -21,6 +22,7 @@ class AuditContext:
 
     db: VerticeDB
     competencia: str | None
+    banco: str | None
     extrato_df: pd.DataFrame
     omie_df: pd.DataFrame
     rules_df: pd.DataFrame
@@ -33,7 +35,8 @@ class AuditContext:
 
     @property
     def periodo_label(self) -> str:
-        return self.competencia or "Todas as competências"
+        banco_desc = f" ({self.banco})" if self.banco else ""
+        return (self.competencia or "Todas as competências") + banco_desc
 
     @property
     def regras_ativas(self) -> int:
@@ -62,13 +65,14 @@ def init_session_state() -> None:
         st.session_state.setdefault(key, value)
 
 
-def build_context(db: VerticeDB, competencia: str | None) -> AuditContext:
-    summary, divs = carregar_divergencias(db, competencia)
+def build_context(db: VerticeDB, competencia: str | None, banco: str | None = None) -> AuditContext:
+    summary, divs = carregar_divergencias(db, competencia, banco=banco)
     ctx = AuditContext(
         db=db,
         competencia=competencia,
-        extrato_df=db.get_extrato_df(competencia=competencia),
-        omie_df=db.get_omie_df(competencia=competencia),
+        banco=banco,
+        extrato_df=db.get_extrato_df(competencia=competencia, banco=banco),
+        omie_df=db.get_omie_df(competencia=competencia, banco=banco),
         rules_df=db.get_rules_df(),
         latest_summary=summary,
         divs_df=divs,

@@ -48,20 +48,31 @@ pg = st.navigation(NAV_GROUPS, position="hidden")
 
 db = get_db()
 periodos = [TODAS] + db.get_available_periods()
+bancos = ["TODOS"] + db.get_available_banks()
 
 with st.sidebar:
     st.html(
         '<span class="vertice-pill-gold">Governança Financeira</span>'
         '<div class="vertice-cinzel-sidebar">Auditoria Vértice</div>'
     )
-    selected = st.selectbox(
+    selected_period = st.selectbox(
         "Competência em análise",
         options=periodos,
         format_func=lambda p: "Todas as competências" if p == TODAS else f"Competência {p}",
         key="sel_global_period",
     )
+    selected_bank = st.selectbox(
+        "Banco em análise",
+        options=bancos,
+        format_func=lambda b: "Todos os bancos" if b == "TODOS" else b,
+        key="sel_global_bank",
+    )
 
-ctx = build_context(db, None if selected == TODAS else selected)
+ctx = build_context(
+    db,
+    competencia=None if selected_period == TODAS else selected_period,
+    banco=None if selected_bank == "TODOS" else selected_bank,
+)
 
 with st.sidebar:
     for group, pages in NAV_GROUPS.items():
