@@ -28,27 +28,28 @@ _BRAND_CSS = """
         margin-bottom: 1rem;
     }
     .vertice-cinzel-title {
-        font-family: 'Cinzel', Georgia, serif;
-        font-size: 22px;
+        font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 20px;
         font-weight: 600;
-        letter-spacing: 0.07em;
-        text-transform: uppercase;
+        letter-spacing: -0.01em;
+        text-transform: none;
         color: #2C3531;
         margin: 0;
-        line-height: 1.25;
+        line-height: 1.3;
     }
     .vertice-cinzel-sidebar {
-        font-family: 'Cinzel', Georgia, serif;
+        font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         font-size: 15px;
         font-weight: 600;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
+        letter-spacing: -0.01em;
+        text-transform: none;
         color: #2C3531;
-        margin: 0.45rem 0 0.15rem 0;
+        margin: 0.35rem 0 0.1rem 0;
     }
     .vertice-subtitle {
         color: #667085;
-        font-size: 0.9rem;
+        font-size: 0.88rem;
+        letter-spacing: normal;
         margin: 0.2rem 0 0 0;
     }
     .vertice-pill-gold {
@@ -60,14 +61,14 @@ _BRAND_CSS = """
         border-radius: 999px;
         font-size: 0.72rem;
         font-weight: 600;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.01em;
         text-transform: uppercase;
     }
     .vertice-nav-group {
-        color: #98A2B3;
-        font-size: 0.68rem;
+        color: #667085;
+        font-size: 0.70rem;
         font-weight: 600;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.02em;
         text-transform: uppercase;
         margin: 0.9rem 0 0.1rem 0.15rem;
     }
