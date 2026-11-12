@@ -2,26 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Literal
 
 import pandas as pd
 import streamlit as st
 
-from src.database import PROJECT_ROOT
-from src.services.ingestao import ResultadoImportacao, descobrir_arquivos_locais, importar_arquivo_local
+from src.services.ingestao import ResultadoImportacao
 from src.ui.context import AuditContext, flash
 
 TipoFonte = Literal["EXTRATO", "OMIE"]
-
-_DESTINOS: dict[TipoFonte, dict[str, str]] = {
-    "EXTRATO": {"Extrato bancário (OFX/CSV/XLSX)": "EXTRATO"},
-    "OMIE": {
-        "Relatório Omie - Movimento CC / Baixas": "MOVIMENTO_CC",
-        "Relatório Omie - Contas a Receber": "CONTAS_RECEBER",
-        "Relatório Omie - Contas a Pagar": "CONTAS_PAGAR",
-    },
-}
 
 
 def reportar_resultado(res: ResultadoImportacao, titulo_ok: str, titulo_erro: str) -> None:
@@ -41,31 +30,6 @@ def reportar_resultado(res: ResultadoImportacao, titulo_ok: str, titulo_erro: st
             st.rerun()
     for err in res.erros:
         st.error(err, title=titulo_erro, icon=":material/error:")
-
-
-def render_arquivos_locais(ctx: AuditContext, tipo: TipoFonte) -> None:
-    """Importação rápida de arquivos salvos na raiz da pasta do projeto."""
-    arquivos = descobrir_arquivos_locais(PROJECT_ROOT)
-    if not arquivos:
-        return
-    destinos = _DESTINOS[tipo]
-    with st.container(border=True):
-        st.subheader(":material/folder_open: Arquivos detectados na pasta do projeto")
-        st.caption("Arquivos `.OFX`, `.CSV` e `.XLSX` encontrados na raiz do projeto, prontos para importação.")
-        c1, c2, c3 = st.columns([3, 2, 2], vertical_alignment="bottom")
-        with c1:
-            selecionado: Path = st.selectbox(
-                "Arquivo local",
-                options=arquivos,
-                format_func=lambda p: f"{p.name} ({p.stat().st_size / 1024:.1f} KB)",
-                key=f"sel_local_file_{tipo}",
-            )
-        with c2:
-            destino_label = st.selectbox("Importar como", options=list(destinos), key=f"sel_local_dest_{tipo}")
-        with c3:
-            if st.button("Importar arquivo da pasta", key=f"btn_import_local_{tipo}", icon=":material/download_done:", width="stretch"):
-                res = importar_arquivo_local(ctx.db, selecionado, destinos[destino_label])  # type: ignore[arg-type]
-                reportar_resultado(res, f"'{selecionado.name}' importado", f"Erro ao importar {selecionado.name}")
 
 
 def render_lotes(ctx: AuditContext, tipo: TipoFonte) -> None:

@@ -7,7 +7,7 @@ import streamlit as st
 from src.services.ingestao import BANCOS_SUPORTADOS, importar_extratos
 from src.ui import components as c
 from src.ui.context import get_context
-from src.ui.ingestao_widgets import render_arquivos_locais, render_lotes, reportar_resultado
+from src.ui.ingestao_widgets import render_lotes, reportar_resultado
 
 AUTO = "Detectar automaticamente pelo arquivo (COMPE / ORG)"
 
@@ -41,8 +41,6 @@ with st.container(border=True):
             bank_override=None if banco == AUTO else banco,
         )
         reportar_resultado(res, "Extratos normalizados e validados", "Falha ao ler arquivo de extrato")
-
-render_arquivos_locais(ctx, "EXTRATO")
 
 for gap in ctx.db.detect_statement_gaps():
     st.warning(

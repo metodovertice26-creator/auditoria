@@ -9,7 +9,7 @@ import streamlit as st
 from src.services.ingestao import ORIGENS_OMIE, importar_relatorios_omie, sincronizar_omie_api
 from src.ui import components as c
 from src.ui.context import flash, get_context
-from src.ui.ingestao_widgets import render_arquivos_locais, render_lotes, reportar_resultado
+from src.ui.ingestao_widgets import render_lotes, reportar_resultado
 
 MODO_UPLOAD = "Upload de relatórios (CSV / XLSX)"
 MODO_API = "Conexão API REST"
@@ -69,7 +69,6 @@ with st.container(border=True):
             )
             reportar_resultado(res, "Relatórios Omie importados", "Falha ao importar relatório Omie")
 
-render_arquivos_locais(ctx, "OMIE")
 render_lotes(ctx, "OMIE")
 
 if not ctx.omie_df.empty:

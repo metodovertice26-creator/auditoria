@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
 from typing import Iterable, Literal
 
 import pandas as pd
@@ -41,8 +40,6 @@ BANCOS_SUPORTADOS: list[str] = [
     "C6 Bank",
     "Banco Safra",
 ]
-
-EXTENSOES_LOCAIS = (".ofx", ".csv", ".xlsx")
 
 
 class ResultadoImportacao(BaseModel):
@@ -120,24 +117,6 @@ def sincronizar_omie_api(db: VerticeDB, app_key: str, app_secret: str, dt_ini: d
         data_fim_br=dt_fim.strftime("%d/%m/%Y"),
     )
     return db.upsert_omie(df_api)
-
-
-def descobrir_arquivos_locais(base_dir: Path) -> list[Path]:
-    """Localiza arquivos .ofx, .csv e .xlsx na raiz da pasta do projeto."""
-    found = {
-        p.resolve(): p
-        for p in base_dir.iterdir()
-        if p.is_file() and p.suffix.lower() in EXTENSOES_LOCAIS and not p.name.startswith("~$")
-    }
-    return sorted(found.values(), key=lambda x: x.name.lower())
-
-
-def importar_arquivo_local(db: VerticeDB, caminho: Path, origem: OrigemOmie | Literal["EXTRATO"]) -> ResultadoImportacao:
-    """Importa um arquivo da pasta do projeto como extrato bancário ou relatório Omie."""
-    entrada = [(caminho.name, caminho.read_bytes())]
-    if origem == "EXTRATO":
-        return importar_extratos(db, entrada)
-    return importar_relatorios_omie(db, entrada, origem_relatorio=origem)
 
 
 def carregar_demonstracao(db: VerticeDB, competencia: str | None = None) -> tuple[int, int]:
