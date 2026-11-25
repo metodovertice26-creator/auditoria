@@ -85,6 +85,16 @@ DEFAULT_AUDIT_RULES: list[dict[str, Any]] = [
         "condicao_sql": None,
         "ativa": True,
     },
+    {
+        "codigo": "AUD-07",
+        "nome": "Auditoria de Factoring & Boletos Facta (IT-FIN-006)",
+        "descricao": "Valida baixa na conta transitória de Factoring (vs. C/C Real), trava anti-boleto duplo, separação de custos na DRE (4.02.02 vs. 2.03.02), batimento de borderôs/recompras e boletos incorretos da Facta.",
+        "categoria": "Factoring & Recebíveis",
+        "severidade": "Crítico",
+        "tipo_regra": "NATIVA",
+        "condicao_sql": None,
+        "ativa": True,
+    },
 ]
 
 DEFAULT_BANK_PARAMS: list[dict[str, Any]] = [
@@ -138,6 +148,15 @@ DEFAULT_BANK_PARAMS: list[dict[str, Any]] = [
         "banco_nome": "Cora",
         "tarifa_boleto_contratada": 0.00,
         "taxa_antecipacao_mensal": 2.10,
+        "modalidade_antecipacao": "COMPOSTO",
+        "iof_tarifa_lote": 0.0,
+        "tolerancia_dias_conciliacao": 2,
+    },
+    {
+        "banco_codigo": "FACTA",
+        "banco_nome": "Facta Factoring",
+        "tarifa_boleto_contratada": 0.00,
+        "taxa_antecipacao_mensal": 3.50,
         "modalidade_antecipacao": "COMPOSTO",
         "iof_tarifa_lote": 0.0,
         "tolerancia_dias_conciliacao": 2,

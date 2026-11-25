@@ -145,3 +145,116 @@ def test_file_ledger_gaps_workflow_and_visual_sql(tmp_path: Path) -> None:
     wf = db.get_workflow_map()
     assert wf[sig]["status_tratativa"] == "Em Contestação"
     assert wf[sig]["justificativa"] == "Protocolo #12345"
+
+
+def test_aud07_factoring_it_fin_006_and_facta(tmp_path: Path) -> None:
+    db = VerticeDB(
+        db_path=tmp_path / "facta_vertice.duckdb",
+        rules_json_path=tmp_path / "facta_regras.json",
+    )
+
+    extrato_df = pd.DataFrame(
+        [
+            {
+                "id_extrato": "EXT-FACT-BOL1",
+                "arquivo_origem": "itau.ofx",
+                "banco_codigo": "341",
+                "banco_nome": "Itaú Unibanco",
+                "conta": "0098208-9",
+                "data_lancamento": "2026-10-10",
+                "tipo_movimento": "CREDITO",
+                "natureza_operacao": "BOLETO_LIQUIDACAO",
+                "descricao_original": "LIQ BOLETO NF-9001",
+                "descricao_normalizada": "LIQ BOLETO NF-9001",
+                "documento": "NF-9001",
+                "valor": 5000.00,
+                "valor_absoluto": 5000.00,
+                "valor_nominal": 5000.00,
+                "valor_liquido": 5000.00,
+                "prazo_dias": None,
+                "data_vencimento_original": None,
+            },
+            {
+                "id_extrato": "EXT-FACT-REC1",
+                "arquivo_origem": "itau.ofx",
+                "banco_codigo": "341",
+                "banco_nome": "Itaú Unibanco",
+                "conta": "0098208-9",
+                "data_lancamento": "2026-10-12",
+                "tipo_movimento": "DEBITO",
+                "natureza_operacao": "PIX_TED_DOC",
+                "descricao_original": "PIX ENVIADO FACTA RECOMPRA NF-8800",
+                "descricao_normalizada": "PIX ENVIADO FACTA RECOMPRA NF-8800",
+                "documento": "REC-8800",
+                "valor": -3200.00,
+                "valor_absoluto": 3200.00,
+                "valor_nominal": None,
+                "valor_liquido": None,
+                "prazo_dias": None,
+                "data_vencimento_original": None,
+            },
+        ]
+    )
+
+    omie_df = pd.DataFrame(
+        [
+            {
+                "id_omie": "OM-FACT-1",
+                "arquivo_origem": "omie.xlsx",
+                "origem_relatorio": "MOVIMENTO_CC",
+                "banco_nome": "Itaú Unibanco",
+                "conta_corrente": "0098208-9",
+                "data_lancamento": "2026-10-10",
+                "data_vencimento": "2026-10-10",
+                "status_titulo": "BAIXADO",
+                "tipo_lancamento": "ENTRADA",
+                "categoria": "1.01.01 - Vendas",
+                "grupo_contabil": "RECEITA",
+                "cliente_fornecedor": "Cliente A",
+                "documento": "NF-9001",
+                "descricao_original": "Cedido Factoring Facta Bordero 12",
+                "descricao_normalizada": "CEDIDO FACTORING FACTA BORDERO 12",
+                "valor": 5000.00,
+                "valor_absoluto": 5000.00,
+                "valor_nominal": 5000.00,
+                "juros_multa": 0.0,
+                "desconto_tarifa": 0.0,
+                "contrato_ref": "FACTA-B12",
+            },
+            {
+                "id_omie": "OM-FACT-2",
+                "arquivo_origem": "omie.xlsx",
+                "origem_relatorio": "MOVIMENTO_CC",
+                "banco_nome": "Factoring - Conta de Antecipação",
+                "conta_corrente": "TRANSITORIA-FACTA",
+                "data_lancamento": "2026-10-10",
+                "data_vencimento": "2026-10-10",
+                "status_titulo": "BAIXADO",
+                "tipo_lancamento": "SAIDA",
+                "categoria": "2.03.02 - Tarifas Bancárias",
+                "grupo_contabil": "DESPESA",
+                "cliente_fornecedor": "Facta Factoring",
+                "documento": "BORD-12",
+                "descricao_original": "Desagio Fator de Compra Bordero 12",
+                "descricao_normalizada": "DESAGIO FATOR DE COMPRA BORDERO 12",
+                "valor": -450.00,
+                "valor_absoluto": 450.00,
+                "valor_nominal": 450.00,
+                "juros_multa": 0.0,
+                "desconto_tarifa": 0.0,
+                "contrato_ref": "FACTA-B12",
+            },
+        ]
+    )
+
+    db.upsert_extrato(extrato_df)
+    db.upsert_omie(omie_df)
+
+    _, divs = executar_auditoria_completa(db)
+    aud07 = divs[divs["codigo_regra"] == "AUD-07"]
+    assert len(aud07) >= 4
+    resumos = " | ".join(aud07["resumo"].tolist())
+    assert "Baixa indevida na C/C Real" in resumos
+    assert "Trava Anti-Boleto Duplo" in resumos
+    assert "4.02.02" in resumos
+    assert "Recompra Factoring" in resumos

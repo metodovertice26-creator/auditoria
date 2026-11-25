@@ -476,13 +476,216 @@ def sugerir_candidatos_conciliacao(
     return cand.head(top_n).reset_index(drop=True)
 
 
+def _is_factoring_text(text: Any) -> bool:
+    norm = clean_description(text)
+    return any(k in norm for k in ("FACTA", "FACTORING", "BORDERO", "CESSAO", "FIDC"))
+
+
+def _is_factoring_account(text: Any) -> bool:
+    norm = clean_description(text)
+    return any(k in norm for k in ("FACTORING", "ANTECIPACAO", "TRANSITORIA", "FACTA"))
+
+
+def _run_aud07_factoring(
+    extrato_df: pd.DataFrame,
+    omie_df: pd.DataFrame,
+    pairs_df: pd.DataFrame,
+    paired_ext_ids: set[str],
+    bank_params: dict[str, dict[str, Any]],
+    add_div: Any,
+) -> None:
+    """AUD-07: Auditoria de Factoring (IT-FIN-006) e Boletos/Operações da Facta."""
+    if extrato_df.empty and omie_df.empty:
+        return
+
+    # 1. Regra de Ouro: título cedido à Factoring baixado na C/C Real em vez da Conta de Antecipação
+    if not omie_df.empty:
+        baixados_entrada = omie_df[
+            (omie_df["status_titulo"].isin(["BAIXADO", "CONCILIADO"])) & (omie_df["valor"] > 0)
+        ]
+        for _, orow in baixados_entrada.iterrows():
+            texto_titulo = f"{orow['descricao_normalizada']} {orow.get('contrato_ref') or ''} {orow['categoria']}"
+            if not _is_factoring_text(texto_titulo):
+                continue
+            if "TRANSFERENCIA" in clean_description(orow["descricao_normalizada"]):
+                continue
+            conta_ctx = f"{orow['banco_nome']} {orow['conta_corrente']}"
+            if not _is_factoring_account(conta_ctx):
+                val = float(orow["valor_absoluto"])
+                add_div(
+                    codigo_regra="AUD-07",
+                    data_ocorrencia=str(orow["data_lancamento"]),
+                    banco=str(orow["banco_nome"]),
+                    valor_esperado=0.0,
+                    valor_realizado=val,
+                    valor_divergente=val,
+                    resumo=f"Baixa indevida na C/C Real (IT-FIN-006): título cedido baixado em {orow['banco_nome']}",
+                    memoria_calculo=(
+                        f"Título Omie {orow['id_omie']} ({orow['cliente_fornecedor']}, doc {orow['documento']}) "
+                        f"possui vínculo de Factoring/Facta, mas foi baixado em '{orow['banco_nome']} / "
+                        f"{orow['conta_corrente']}'. Pela IT-FIN-006, deve ser baixado na conta transitória "
+                        f"'Factoring - Conta de Antecipação'."
+                    ),
+                    id_extrato=None,
+                    id_omie=str(orow["id_omie"]),
+                    extra_detail={"subregra": "REGRA_DE_OURO_CC_REAL", "conta_corrente": str(orow["conta_corrente"])},
+                )
+
+    # 2. Trava Anti-Boleto Duplo: mesmo documento em Factoring/Antecipação e Liquidação de Boleto
+    if not extrato_df.empty and not omie_df.empty:
+        ignore_docs = {"", "S/N", "SN", "SEM DOC", "SEM DOCUMENTO", "0"}
+        fact_docs: dict[str, dict[str, Any]] = {}
+        for _, orow in omie_df.iterrows():
+            doc = clean_description(orow["documento"])
+            if doc in ignore_docs or doc.startswith("SEQ-"):
+                continue
+            ctx_o = f"{orow['descricao_normalizada']} {orow.get('contrato_ref') or ''} {orow['banco_nome']} {orow['conta_corrente']}"
+            if _is_factoring_text(ctx_o) or _is_factoring_account(ctx_o):
+                fact_docs[doc] = orow.to_dict()
+
+        boletos_ext = extrato_df[extrato_df["natureza_operacao"] == "BOLETO_LIQUIDACAO"]
+        for _, erow in boletos_ext.iterrows():
+            doc_e = clean_description(erow["documento"])
+            if doc_e in fact_docs:
+                orow_d = fact_docs[doc_e]
+                val = float(erow["valor_absoluto"])
+                add_div(
+                    codigo_regra="AUD-07",
+                    data_ocorrencia=str(erow["data_lancamento"]),
+                    banco=str(erow["banco_nome"]),
+                    valor_esperado=0.0,
+                    valor_realizado=val,
+                    valor_divergente=val,
+                    resumo=f"Trava Anti-Boleto Duplo (IT-FIN-006): doc {erow['documento']} em Factoring e Boleto {erow['banco_nome']}",
+                    memoria_calculo=(
+                        f"Documento '{erow['documento']}' aparece liquidado como boleto no extrato ({erow['banco_nome']}, "
+                        f"R$ {val:,.2f}) e também vinculado à Factoring no Omie ({orow_d['id_omie']}). "
+                        f"Pela IT-FIN-006, NF cedida à Factoring não pode manter boleto ativo na carteira bancária."
+                    ),
+                    id_extrato=str(erow["id_extrato"]),
+                    id_omie=str(orow_d["id_omie"]),
+                    extra_detail={"subregra": "ANTI_BOLETO_DUPLO", "documento": str(erow["documento"])},
+                )
+
+    # 3. Separação de Custos na DRE: 4.02.02 (Deságio/Juros/Recompra) vs 2.03.02 (Tarifas)
+    if not omie_df.empty:
+        saidas_omi = omie_df[omie_df["valor"] < 0]
+        for _, orow in saidas_omi.iterrows():
+            ctx_o = f"{orow['banco_nome']} {orow['conta_corrente']} {orow['cliente_fornecedor']} {orow['descricao_normalizada']}"
+            if not (_is_factoring_account(ctx_o) or _is_factoring_text(ctx_o)):
+                continue
+            desc = clean_description(orow["descricao_normalizada"])
+            cat = clean_description(orow["categoria"])
+            if "TRANSFERENCIA" in desc or "TRANSFERENCIA" in cat:
+                continue
+
+            val = float(orow["valor_absoluto"])
+            is_desagio_juros = any(k in desc for k in ("DESAGIO", "FATOR", "JUROS", "RECOMPRA", "ENCARGO", "PRORROG"))
+            is_tarifa = any(k in desc for k in ("TARIFA", "BOLETO", "BORDERO", "TED", "DOC", "CUSTO"))
+
+            if is_desagio_juros and "4.02.02" not in cat:
+                add_div(
+                    codigo_regra="AUD-07",
+                    data_ocorrencia=str(orow["data_lancamento"]),
+                    banco=str(orow["banco_nome"]),
+                    valor_esperado=val,
+                    valor_realizado=val,
+                    valor_divergente=val,
+                    resumo=f"DRE Factoring (IT-FIN-006): Deságio/Encargo fora da categoria 4.02.02 ({orow['categoria']})",
+                    memoria_calculo=(
+                        f"Lançamento {orow['id_omie']} ('{orow['descricao_original']}') no valor de R$ {val:,.2f} "
+                        f"está classificado em '{orow['categoria']}'. Pela IT-FIN-006, Deságio/Fator/Juros/Recompra "
+                        f"devem ser alocados na categoria 4.02.02."
+                    ),
+                    id_extrato=None,
+                    id_omie=str(orow["id_omie"]),
+                    extra_detail={"subregra": "DRE_CATEGORIA_40202", "categoria_atual": str(orow["categoria"])},
+                )
+            elif is_tarifa and not is_desagio_juros and "2.03.02" not in cat:
+                add_div(
+                    codigo_regra="AUD-07",
+                    data_ocorrencia=str(orow["data_lancamento"]),
+                    banco=str(orow["banco_nome"]),
+                    valor_esperado=val,
+                    valor_realizado=val,
+                    valor_divergente=val,
+                    resumo=f"DRE Factoring (IT-FIN-006): Tarifa de Borderô/Boleto fora da categoria 2.03.02 ({orow['categoria']})",
+                    memoria_calculo=(
+                        f"Lançamento {orow['id_omie']} ('{orow['descricao_original']}') no valor de R$ {val:,.2f} "
+                        f"está classificado em '{orow['categoria']}'. Pela IT-FIN-006, Tarifas de Boleto/Borderô/TED "
+                        f"devem ser separadas na categoria 2.03.02."
+                    ),
+                    id_extrato=None,
+                    id_omie=str(orow["id_omie"]),
+                    extra_detail={"subregra": "DRE_CATEGORIA_20302", "categoria_atual": str(orow["categoria"])},
+                )
+
+    # 4. Débitos / Recompras / Boletos Incorretos da Facta no Extrato
+    if not extrato_df.empty:
+        facta_ext = extrato_df[extrato_df["descricao_normalizada"].map(_is_factoring_text)]
+        facta_cfg = bank_params.get("Facta Factoring", {})
+        for _, erow in facta_ext.iterrows():
+            eid = str(erow["id_extrato"])
+            val_ext = float(erow["valor"])
+            if val_ext < 0 and eid not in paired_ext_ids:
+                abs_v = abs(val_ext)
+                add_div(
+                    codigo_regra="AUD-07",
+                    data_ocorrencia=str(erow["data_lancamento"]),
+                    banco=str(erow["banco_nome"]),
+                    valor_esperado=0.0,
+                    valor_realizado=abs_v,
+                    valor_divergente=abs_v,
+                    resumo=f"Débito/Recompra Factoring sem registro no Omie ({erow['banco_nome']}): R$ {abs_v:,.2f}",
+                    memoria_calculo=(
+                        f"Débito de R$ {abs_v:,.2f} em {erow['data_lancamento']} ('{erow['descricao_original']}') "
+                        f"para Factoring/Facta sem transferência de recompra ou lançamento de encargos (4.02.02/2.03.02) "
+                        f"correspondente no Omie."
+                    ),
+                    id_extrato=eid,
+                    id_omie=None,
+                    extra_detail={"subregra": "RECOMPRA_SEM_OMIE"},
+                )
+            elif val_ext > 0 and erow["natureza_operacao"] != "ANTECIPACAO_RECEBIVEIS":
+                vn = erow["valor_nominal"] if pd.notna(erow["valor_nominal"]) else None
+                prazo = erow["prazo_dias"] if pd.notna(erow["prazo_dias"]) else None
+                if vn is not None and prazo is not None and float(vn) > 0 and float(prazo) > 0:
+                    vp_res = calcular_vp_antecipacao(
+                        valor_nominal=float(vn),
+                        valor_liquido_creditado=abs(val_ext),
+                        prazo_dias=float(prazo),
+                        taxa_mensal_pct=float(facta_cfg.get("taxa_antecipacao_mensal", 3.50)),
+                        modalidade=str(facta_cfg.get("modalidade_antecipacao", "COMPOSTO")),
+                        iof_tarifa_lote=float(facta_cfg.get("iof_tarifa_lote", 0.0)),
+                        tolerancia_reais=0.10,
+                    )
+                    if vp_res["divergente"]:
+                        add_div(
+                            codigo_regra="AUD-07",
+                            data_ocorrencia=str(erow["data_lancamento"]),
+                            banco=str(erow["banco_nome"]),
+                            valor_esperado=float(vp_res["vp_teorico"]),
+                            valor_realizado=abs(val_ext),
+                            valor_divergente=float(vp_res["valor_divergente"]),
+                            resumo=f"Líquido de Borderô Factoring divergente: R$ {abs(val_ext):,.2f} vs VP R$ {vp_res['vp_teorico']:,.2f}",
+                            memoria_calculo=(
+                                f"Borderô Facta/Factoring Nominal R$ {float(vn):,.2f} ({int(prazo)} dias) | "
+                                f"VP teórico R$ {vp_res['vp_teorico']:,.2f} vs creditado R$ {abs(val_ext):,.2f} | "
+                                f"Taxa efetiva {vp_res['taxa_efetiva_mensal_pct']:.2f}% a.m."
+                            ),
+                            id_extrato=eid,
+                            id_omie=None,
+                            extra_detail={"subregra": "BORDERO_FACTA_VP", **vp_res},
+                        )
+
+
 def executar_auditoria_completa(
     db: VerticeDB,
     competencia: str | None = None,
     banco: str | None = None,
 ) -> tuple[dict[str, Any], pd.DataFrame]:
     """
-    Executa todas as regras ativas (AUD-01 a AUD-06 + Regras Customizadas SQL),
+    Executa todas as regras ativas (AUD-01 a AUD-07 + Regras Customizadas SQL),
     salva a execução no DuckDB e retorna (resumo_kpis, df_divergencias).
     """
     execucao_id = f"EXEC-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
@@ -952,6 +1155,19 @@ def executar_auditoria_completa(
                     "saidas_omie": float(drow["saidas_omie"]),
                 },
             )
+
+    # =========================================================================
+    # AUD-07: Auditoria de Factoring & Boletos Facta (IT-FIN-006)
+    # =========================================================================
+    if "AUD-07" in active_rules:
+        _run_aud07_factoring(
+            extrato_df=extrato_df,
+            omie_df=omie_df,
+            pairs_df=pairs_df,
+            paired_ext_ids=paired_ext_ids,
+            bank_params=bank_params,
+            add_div=_add_div,
+        )
 
     # =========================================================================
     # Regras Customizadas SQL (CUS-*) executadas direto no DuckDB
