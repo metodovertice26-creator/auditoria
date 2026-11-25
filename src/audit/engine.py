@@ -1164,7 +1164,7 @@ def executar_auditoria_completa(
             extrato_df=extrato_df,
             omie_df=omie_df,
             pairs_df=pairs_df,
-            paired_ext_ids=paired_ext_ids,
+            paired_ext_ids=matched_ext_ids,
             bank_params=bank_params,
             add_div=_add_div,
         )
