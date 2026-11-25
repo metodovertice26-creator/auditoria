@@ -9,6 +9,7 @@ from __future__ import annotations
 import streamlit as st
 
 from src.ui import components as c
+from src.ui.auth import render_logout_button, require_auth
 from src.ui.context import TODAS, build_context, get_db, init_session_state
 from src.ui.theme import apply_brand_theme
 
@@ -20,6 +21,7 @@ st.set_page_config(
 )
 apply_brand_theme()
 init_session_state()
+require_auth()
 
 NAV_GROUPS: dict[str, list[st.Page]] = {
     "Início": [
@@ -89,5 +91,7 @@ with st.sidebar:
         if ctx.latest_summary:
             st.caption(f":material/pending_actions: Exceções em aberto: **{ctx.kpis.pendentes}**")
             st.caption(f":material/schedule: Última execução: **{ctx.latest_summary['executado_em']}**")
+
+    render_logout_button()
 
 pg.run()

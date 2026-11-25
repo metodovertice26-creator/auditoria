@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import os
+from pathlib import Path
+import tempfile
 from typing import Any
+from uuid import uuid4
 
 import pandas as pd
 import streamlit as st
@@ -49,10 +53,34 @@ class AuditContext:
         return not (self.extrato_df.empty and self.omie_df.empty)
 
 
+def _should_isolate_session_db() -> bool:
+    try:
+        if "ISOLATE_SESSION_DB" in st.secrets:
+            return bool(st.secrets["ISOLATE_SESSION_DB"])
+    except Exception:
+        pass
+    if os.environ.get("ISOLATE_SESSION_DB", "").lower() in ("1", "true", "yes"):
+        return True
+    return Path("/mount/src").exists()
+
+
 def get_db() -> VerticeDB:
-    """Instancia o gerenciador DuckDB (caminho sobrescrevível em testes via session_state)."""
+    """Instancia o gerenciador DuckDB (isolado por sessão na nuvem ou sobrescrevível em testes)."""
     db_override = st.session_state.get("_vertice_db_path")
-    return VerticeDB(db_path=db_override) if db_override else VerticeDB()
+    rules_override = st.session_state.get("_vertice_rules_path")
+    if not db_override and _should_isolate_session_db():
+        session_dir = Path(tempfile.gettempdir()) / f"vertice_{uuid4().hex}"
+        session_dir.mkdir(parents=True, exist_ok=True)
+        db_override = str(session_dir / "vertice_auditoria.duckdb")
+        rules_override = str(session_dir / "regras_customizadas.json")
+        st.session_state["_vertice_db_path"] = db_override
+        st.session_state["_vertice_rules_path"] = rules_override
+
+    if db_override:
+        if rules_override:
+            return VerticeDB(db_path=db_override, rules_json_path=rules_override)
+        return VerticeDB(db_path=db_override)
+    return VerticeDB()
 
 
 def init_session_state() -> None:
