@@ -3,4 +3,10 @@
 .pytest_cache/
 .venv/
 venv/
+*.duckdb
 *.duckdb.wal
+*.ofx
+*.xlsx
+*.xls
+!dados_exemplo/**
+.streamlit/secrets.toml
